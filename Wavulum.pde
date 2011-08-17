@@ -62,11 +62,11 @@ To do:
 Estimated power consumption
 LED = 17 * 20ma = 340
 */
-#include </home/mistercrunch/Programs/arduino/libraries/TLC5940/TLC5940.h>
-#include </home/mistercrunch/Programs/arduino/libraries/TLC5940/TLC5940.cpp>
-
+#include </home/mistercrunch/Code/Arduino/Wavulum/TLC5940.h>
 // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
 
+
+//#include <TLC5940.cpp>
 #include <EEPROM.h>
 TLC5940 leds(9, 12);
 // Arduino pins (corresponds to the AVR pins below):
@@ -117,7 +117,7 @@ unsigned long LastEventCheck = 0;    //Stores the last time we read inputs
   int iBrightness[3];
 //------------------------------------------------------------------------------------------------------------
 //High level vars
-int iAutoMode =1;//defines the high level mode (auto memory, auto random, manual)
+int iAutoMode =2;//defines the high level mode (auto memory, auto random, manual)
 int iCurrentPattern =-1; //Applies to auto mode memory only
 //These help keeping track of the patterns cycles in auto mode
 long unsigned iSequenceStartTime=0;
@@ -129,8 +129,12 @@ unsigned int iSequenceDuration=0;
 //---------------------------------------------------------------------------------------------------------------------------------------
 void setup() {
 
+ 
   pinMode(btnMode, INPUT); 
+  digitalWrite(btnMode, HIGH);  //internal pullup
+  
   pinMode(btnMem, INPUT); 
+  digitalWrite(btnMem, HIGH);  //internal pullup
 
   //randomSeed(analogRead(1));
 
@@ -223,7 +227,7 @@ void WritePattern(int iPatternNumber)
    WriteIntToEEPROM(iStartAddress + 16,   iRefColor[2]);
    WriteIntToEEPROM(iStartAddress + 18,   iBrightness[2]);
 
-   PrintPattern(iPatternNumber);
+   //PrintPattern(iPatternNumber);
 }
 
 void ReadPattern(int iPatternNumber)
@@ -242,8 +246,9 @@ void ReadPattern(int iPatternNumber)
    iRefColor[2]          = ReadIntFromEEPROM(iStartAddress + 16);
    iBrightness[2]        = ReadIntFromEEPROM(iStartAddress + 18);
    
-   PrintPattern(iPatternNumber);
+   //PrintPattern(iPatternNumber);
 }
+/*
 void PrintPattern(int iPatternNumber)
 {  
    Serial.print("Pattern  ");
@@ -294,7 +299,7 @@ void PrintPattern(int iPatternNumber)
    Serial.println("");
    
    Serial.println("");
-}
+}*/
 void DeletePattern(int iPatternNumber)
 {
    Serial.println("Deleting pattern!");
@@ -383,13 +388,13 @@ void AssignRandomPotValues()
 byte CheckButton(int btnId)
 {
   //This function looks to see if a button has been pushed and shows a little animation while the button is down
-  if(digitalRead(btnId) ==0)
+  if(digitalRead(btnId) ==1)
     return 0;
   else
   {
       //Button is down
       unsigned long lBtnPushed = millis();
-      while(digitalRead(btnId) ==1 && ((millis() - lBtnPushed) < 3000))
+      while(digitalRead(btnId) == 0 && ((millis() - lBtnPushed) < 3000))
       {
           ClearCurRGB();
           //-----------------------
@@ -400,7 +405,7 @@ byte CheckButton(int btnId)
             curR[iRandLED] = PWMRANGE -1;
             curG[iRandLED] = PWMRANGE -1;
             curB[iRandLED] = PWMRANGE -1;
-            if (digitalRead(btnMem)==1) return 3;//both buttons
+            if (digitalRead(btnMem)==0) return 3;//both buttons
           }
           else
           {
@@ -410,7 +415,7 @@ byte CheckButton(int btnId)
             curG[iRandLED] = PWMRANGE-1;
             iRandLED = random(17);
             curB[iRandLED] = PWMRANGE-1;
-            if (digitalRead(btnMode)==1) return 3;//both buttons
+            if (digitalRead(btnMode)==0) return 3;//both buttons
           }
           //-----------------------
           DisplayLEDs();    
@@ -482,7 +487,7 @@ void CheckButtons()
     {
       //The button has been held, delete? Will flash red 5 times over 1 sec, if the button is still down after that: DELETE pattern
       int i=0;
-      while(i<5 && digitalRead(btnMem)==1)
+      while(i<5 && digitalRead(btnMem)==0)
       {
         FadeToColor(200, PWMRANGE-1,0,0); //Flash 5 times
         i++;
@@ -499,7 +504,7 @@ void CheckButtons()
     {
       //The mode button has been held, reset the Eeprom? Will flash red 5 times over 5 sec, if the button is still down after that: DELETE pattern
       int i=0;
-      while(i<5 && digitalRead(btnMode)==1)
+      while(i<5 && digitalRead(btnMode)==0)
       {
         
         FadeToColor(1000, PWMRANGE-1,0,0); //Flash 5 times
