@@ -68,7 +68,7 @@ LED = 32 * 80ma = 2.56A @ 3.2
 //   SIN_PIN   = 13
 
 */
-#include </home/mistercrunch/Code/Arduino/Wavulum/TLC5940.h> // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
+#include "TLC5940.h" // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
 #include <EEPROM.h>
 
 //Pins
