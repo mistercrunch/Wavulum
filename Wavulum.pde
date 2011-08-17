@@ -128,6 +128,8 @@ unsigned long prevMillis;            //used for a timing delay
 unsigned long curMillis=0;           //used to avoid calling the function millis() many times
 unsigned long LastEventCheck = 0;    //Stores the last time we read inputs
 
+
+
 //------------------------------------------------------------------------------------------------------------
 //Pattern variables
   byte CycleMode = CYCLE_MODE_FLASH;//Cycle mode (1-flashing, 2-fade-in/cut, 3-fade-in/fade-out, 4-fade into next color)
