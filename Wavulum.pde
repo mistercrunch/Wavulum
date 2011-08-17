@@ -1,6 +1,3 @@
-
-
-
 /*
 --------------------------------------------------------------------------------------------------------------------
 Project: LedHat
@@ -59,16 +56,9 @@ To do:
 * Put 2 buttons on helmet
 
 --------------------------------------------------------------------------------------------------------------------
-Estimated power consumption
-LED = 17 * 20ma = 340
-*/
-#include </home/mistercrunch/Code/Arduino/Wavulum/TLC5940.h>
-// https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
+Estimated max power consumption (all white)
+LED = 32 * 80ma = 2.56A @ 3.2
 
-
-//#include <TLC5940.cpp>
-#include <EEPROM.h>
-TLC5940 leds(9, 12);
 // Arduino pins (corresponds to the AVR pins below):
 //   SCLK_PIN  =  8
 //   XLAT_PIN  =  9
@@ -77,15 +67,46 @@ TLC5940 leds(9, 12);
 //   VPRG_PIN  = 12
 //   SIN_PIN   = 13
 
-//Program Constants
-#define btnMode 2//Arduino pin 0 is used for "Button 1" (changes cycle mode, push = next mode)
-#define btnMem 3
+*/
+#include </home/mistercrunch/Code/Arduino/Wavulum/TLC5940.h> // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
+#include <EEPROM.h>
+
+//Pins
+#define PIN_BTN_MODE  2
+#define PIN_BTN_MEM   3    
+
+//Buttons
+#define BTN_DOWN  0 //Button is pushed down
+#define BTN_UP    1 //Button is left alone
+
+//AUTO MODES
+#define NB_AUTO_MODE      3    //Nubmer of modes bellow
+#define AUTO_MODE_MANUAL  0    //Read pots to show images
+#define AUTO_MODE_EEPROM  1    //Reads patterns from EEPROM internal memory
+#define AUTO_MODE_RANDOM  2    //Generates random patterns
+
+//Cycle MODES (1-flashing, 2-fade-in/cut, 3-fade-in/fade-out, 4-fade into next color)
+#define NB_CYCLE_MODE             5
+#define CYCLE_MODE_FLASH          0
+#define CYCLE_MODE_FADE_IN        1
+#define CYCLE_MODE_FADE_IN_OUT    2
+#define CYCLE_MODE_FADE_TO_NEXT   3
+#define CYCLE_MODE_PALETTE_ANIM   4
+
+//Button statuses
+#define BTN_STATUS_NONE           0
+#define BTN_STATUS_SHORT_PUSH     1
+#define BTN_STATUS_LONG_PUSH      2
+#define BTN_STATUS_BOTH           3
+
+
 #define MSINTRVL 15      //Can be used to delay the execution of the code, without interfering with the low level code necessities
 #define NBLEDS 16        //Number of RGB LEDs connected (Each RGB LED uses 3 channels)
 #define PWMRANGE 4096   //PWM range on the TLC5940
 #define EventCheckDelay 30 //Interval at which we look for input changes (pots and buttons)
 
 //Program Variables
+TLC5940 leds(9, 12);
 
 //Operational variables 
 int curR[NBLEDS];
@@ -109,7 +130,7 @@ unsigned long LastEventCheck = 0;    //Stores the last time we read inputs
 
 //------------------------------------------------------------------------------------------------------------
 //Pattern variables
-  byte CycleMode = 0;               //Cycle mode (1-flashing, 2-fade-in/cut, 3-fade-in/fade-out, 4-fade into next color)
+  byte CycleMode = CYCLE_MODE_FLASH;//Cycle mode (1-flashing, 2-fade-in/cut, 3-fade-in/fade-out, 4-fade into next color)
   int PotCycleSpeed = 10;           //Initial value for the Poto1 (determines cycle speed)
   int PotColorRandomness = 1023;    //Initial value for the Poto3 (color randomness)
   int iNbColor=1;
@@ -117,7 +138,7 @@ unsigned long LastEventCheck = 0;    //Stores the last time we read inputs
   int iBrightness[3];
 //------------------------------------------------------------------------------------------------------------
 //High level vars
-int iAutoMode =2;//defines the high level mode (auto memory, auto random, manual)
+int iAutoMode = AUTO_MODE_RANDOM;//defines the high level mode (auto memory, auto random, manual)
 int iCurrentPattern =-1; //Applies to auto mode memory only
 //These help keeping track of the patterns cycles in auto mode
 long unsigned iSequenceStartTime=0;
@@ -130,11 +151,11 @@ unsigned int iSequenceDuration=0;
 void setup() {
 
  
-  pinMode(btnMode, INPUT); 
-  digitalWrite(btnMode, HIGH);  //internal pullup
+  pinMode(PIN_BTN_MODE, INPUT); 
+  digitalWrite(PIN_BTN_MODE, HIGH);  //internal pullup
   
-  pinMode(btnMem, INPUT); 
-  digitalWrite(btnMem, HIGH);  //internal pullup
+  pinMode(PIN_BTN_MEM, INPUT); 
+  digitalWrite(PIN_BTN_MEM, HIGH);  //internal pullup
 
   //randomSeed(analogRead(1));
 
@@ -157,7 +178,7 @@ void loop () {
   if(curMillis > (LastEventCheck + EventCheckDelay))
   {
     CheckButtons();
-    if (iAutoMode==0) ReadPots();
+    if (iAutoMode == AUTO_MODE_MANUAL) ReadPots();
     else ManageAutoMode();
     LastEventCheck = curMillis;
     
@@ -360,19 +381,18 @@ void StartNextPattern()
     iNbColor=1;
     iSequenceStartTime = millis();
   
-    if (iAutoMode==1)
+    if (iAutoMode == AUTO_MODE_EEPROM)
     {
       
       int iNbPatterns = ReadIntFromEEPROM(0);
       
       if (iNbPatterns ==0)
-        iAutoMode=2;//No patterns in memory, switching to random mode
+        iAutoMode = AUTO_MODE_RANDOM;//No patterns in memory, switching to random mode
       else
-      
         LoadNextPattern();
     }
   
-    if(iAutoMode==2)
+    if(iAutoMode==AUTO_MODE_RANDOM)
       AssignRandomPotValues();
 }     
 void AssignRandomPotValues()
@@ -382,32 +402,32 @@ void AssignRandomPotValues()
       iBrightness[0] = 512;//sticking with pure colors only
       PotColorRandomness  = random(800);//limiting color range to 1/2 at most  
       PotCycleSpeed = (random(1024) / 10) + 1;   
-      CycleMode = random(5) ; 
+      CycleMode = random(NB_CYCLE_MODE) ; 
 }
 
 byte CheckButton(int btnId)
 {
   //This function looks to see if a button has been pushed and shows a little animation while the button is down
-  if(digitalRead(btnId) ==1)
-    return 0;
+  if(digitalRead(btnId) == BTN_UP)
+    return BTN_STATUS_NONE;
   else
   {
       //Button is down
       unsigned long lBtnPushed = millis();
-      while(digitalRead(btnId) == 0 && ((millis() - lBtnPushed) < 3000))
+      while(digitalRead(btnId) == BTN_DOWN && ((millis() - lBtnPushed) < 3000))
       {
           ClearCurRGB();
           //-----------------------
           //Different animation for the two buttons
-           if (btnId==btnMode)
+           if (btnId == PIN_BTN_MODE)
           {
             int iRandLED = random(17);
             curR[iRandLED] = PWMRANGE -1;
             curG[iRandLED] = PWMRANGE -1;
             curB[iRandLED] = PWMRANGE -1;
-            if (digitalRead(btnMem)==0) return 3;//both buttons
+            if (digitalRead(PIN_BTN_MEM) == BTN_DOWN) return BTN_STATUS_BOTH;//both buttons
           }
-          else
+          else if (btnId == PIN_BTN_MEM)
           {
             int iRandLED = random(17);
             curR[iRandLED] = PWMRANGE-1;
@@ -415,16 +435,16 @@ byte CheckButton(int btnId)
             curG[iRandLED] = PWMRANGE-1;
             iRandLED = random(17);
             curB[iRandLED] = PWMRANGE-1;
-            if (digitalRead(btnMode)==0) return 3;//both buttons
+            if (digitalRead(PIN_BTN_MODE)== BTN_DOWN) return BTN_STATUS_BOTH;//both buttons
           }
           //-----------------------
           DisplayLEDs();    
           delay(30);
       }
       if (millis() - lBtnPushed < 3000)
-        return 1; //1 is for short push
+        return BTN_STATUS_SHORT_PUSH; //1 is for short push
       else
-        return 2; //2 is for long push    
+        return BTN_STATUS_LONG_PUSH; //2 is for long push    
   }
 }
 
@@ -447,47 +467,47 @@ void FadeToColor(int iDelay, int R,int G,int B)
 
 void CheckButtons()
 {
-  int btnModeStatus = CheckButton(btnMode);
-  int btnMemStatus = CheckButton(btnMem);
+  int btnModeStatus = CheckButton(PIN_BTN_MODE);
+  int btnMemStatus = CheckButton(PIN_BTN_MEM);
   
-  if (btnMemStatus == 3 || btnModeStatus ==3)
+  if (btnMemStatus == BTN_STATUS_BOTH || btnModeStatus ==BTN_STATUS_BOTH)
   {
     //If two buttons are pushed at the same time, we're switching auto mode (from pattern, to random patterns, to manual)
 
     FinishAllCycles();    
     iAutoMode++;
-    if (iAutoMode >2) iAutoMode=0;
+    if (iAutoMode >= NB_AUTO_MODE) iAutoMode=AUTO_MODE_MANUAL;
     
-    if (iAutoMode == 0)          
+    //Start a new pattern based on that new auto mode
+    if (iAutoMode == AUTO_MODE_MANUAL)          
     { 
-      //Manual mode
       iNbColor=1; //resets colors to only one
-      CycleMode=0;  //resets flashing mode to default
+      CycleMode=CYCLE_MODE_FLASH;  //resets flashing mode to default
       FadeToColor(1000, 0,0,PWMRANGE-1); //Pulsing blue to let the user know he is in MANUAL  mode
     } 
-    else if (iAutoMode == 1)     
+    else if (iAutoMode == AUTO_MODE_EEPROM)     
     {
        //Memory cycle mode
        LoadNextPattern();
        FadeToColor(1000, PWMRANGE-1,0,0);
     }
-    else if (iAutoMode == 2)     
+    else if (iAutoMode == AUTO_MODE_RANDOM)     
     { 
       StartNextPattern();
       FadeToColor(1000, 0,PWMRANGE-1,0);
     }
   }
   
-  if (iAutoMode ==1)
+  if (iAutoMode ==AUTO_MODE_EEPROM)
   {
     //We're in auto mode: the auto mode that cycles through patterns stored in memory
-    if (btnMemStatus==1) LoadNextPattern();
-    if (btnModeStatus==1) LoadPreviousPattern();
-    if (btnMemStatus==2) 
+    if (btnMemStatus ==  BTN_STATUS_SHORT_PUSH) LoadNextPattern();
+    if (btnModeStatus == BTN_STATUS_SHORT_PUSH) LoadPreviousPattern();
+    if (btnMemStatus == BTN_STATUS_LONG_PUSH) 
     {
       //The button has been held, delete? Will flash red 5 times over 1 sec, if the button is still down after that: DELETE pattern
       int i=0;
-      while(i<5 && digitalRead(btnMem)==0)
+      while(i<5 && digitalRead(PIN_BTN_MODE) == BTN_DOWN)
       {
         FadeToColor(200, PWMRANGE-1,0,0); //Flash 5 times
         i++;
@@ -497,14 +517,13 @@ void CheckButtons()
         //Serial.println("Deleting pattern");
         DeletePattern(iCurrentPattern);
         FadeToColor(200, 0,PWMRANGE-1,0); //Pulse white to confirm deletion
-        
       }    
     }
-    if (btnModeStatus==2) 
+    if (btnModeStatus==BTN_STATUS_LONG_PUSH) 
     {
       //The mode button has been held, reset the Eeprom? Will flash red 5 times over 5 sec, if the button is still down after that: DELETE pattern
       int i=0;
-      while(i<5 && digitalRead(btnMode)==0)
+      while(i<5 && digitalRead(PIN_BTN_MODE)== BTN_DOWN)
       {
         
         FadeToColor(1000, PWMRANGE-1,0,0); //Flash 5 times
@@ -520,36 +539,32 @@ void CheckButtons()
           
     }
   }
-  if (iAutoMode ==2)
+  if (iAutoMode ==AUTO_MODE_RANDOM)
   {
     //We're in random auto mode: the one that picks random patterns
-    if (btnModeStatus==1) AssignRandomPotValues();
-    if (btnMemStatus==1) AssignRandomPotValues();
-    if (btnMemStatus==2) 
+    if (btnModeStatus == BTN_STATUS_SHORT_PUSH || btnMemStatus ==  BTN_STATUS_SHORT_PUSH) 
+      AssignRandomPotValues();
+
+    if (btnMemStatus == BTN_STATUS_LONG_PUSH) 
     {
       FadeToColor(1000, 0,PWMRANGE-1,0);  
       StoreNewPattern();
     }
   }
-  else if (iAutoMode ==0)
+  else if (iAutoMode ==AUTO_MODE_MANUAL)
   {
-    //We're in manual mode
-    if (btnModeStatus==1) 
-    {  
-       //FadeToColor(1000, PWMRANGE-1,0,0);
+    if (btnModeStatus == BTN_STATUS_SHORT_PUSH) 
        NextMode();
-    }
-    if (btnModeStatus==2) 
+    if (btnModeStatus == BTN_STATUS_LONG_PUSH) 
     {  
       FadeToColor(1000, PWMRANGE-1,PWMRANGE-1,PWMRANGE-1);  
       AddColor();
     }
-    if (btnMemStatus==2) 
+    if (btnMemStatus == BTN_STATUS_LONG_PUSH) 
     {
       FadeToColor(1000, 0,PWMRANGE-1,0);  
       StoreNewPattern();
-    }
-      
+    }  
   }
 }
 
@@ -570,10 +585,10 @@ void AddColor()
 }
 void ReadPots()
 {
-    iRefColor[0] = CalibratePot(analogRead(5), 6, 932) * 3 * 4;
-    iBrightness[0] = (1023 - CalibratePot(analogRead(4), 6, 932));
+    iRefColor[0]        = CalibratePot(analogRead(5), 6, 932) * 3 * 4;
+    iBrightness[0]      = (1023 - CalibratePot(analogRead(4), 6, 932));
     PotColorRandomness  = CalibratePot(analogRead(3), 6, 932);
-    PotCycleSpeed = (CalibratePot(analogRead(2), 6, 932) / 4)+2;
+    PotCycleSpeed       = (CalibratePot(analogRead(2), 6, 932) / 4)+2;
 }
 
 int CalibratePot(int iValue, int iMin, int iMax)
@@ -588,7 +603,7 @@ void NextMode()
 {
   //Goes to next Cycle Mode 
   CycleMode += 1;
-  if (CycleMode >4) CycleMode=0;
+  if (CycleMode >= NB_CYCLE_MODE) CycleMode=0;
   
 }
 //---------------------------------------------------------------------------------------------------------------------------------------
@@ -631,7 +646,7 @@ void calcFrame(int i) {
     StartNewCycle(i);
   }
   
-  if (CycleMode ==0)
+  if (CycleMode ==CYCLE_MODE_FLASH)
   {
     //Just flashing
     if(currentFrame[i] <= cycleNbFrame[i] /2)
@@ -647,7 +662,7 @@ void calcFrame(int i) {
       curB[i] = 0;
     }
   }  
-  else if (CycleMode ==1)
+  else if (CycleMode ==CYCLE_MODE_FADE_IN)
   {
       //Fading in then go out
       float perc = currentFrame[i] / (float)cycleNbFrame[i];
@@ -655,7 +670,7 @@ void calcFrame(int i) {
       curG[i] = toG[i] * perc;
       curB[i] = toB[i] * perc;
   }
-  else if (CycleMode ==2)
+  else if (CycleMode ==CYCLE_MODE_FADE_IN_OUT)
   { 
       //Fading in then fade out
       float perc =  sin((((float)currentFrame[i] / (float)cycleNbFrame[i])) * 3.1418);
@@ -664,7 +679,7 @@ void calcFrame(int i) {
       curG[i] = toG[i] * perc;
       curB[i] = toB[i] * perc;
   }
-  else if (CycleMode ==3)
+  else if (CycleMode == CYCLE_MODE_FADE_TO_NEXT)
   {
       //Fading from a color to another
       float perc = (float)currentFrame[i] / (float)cycleNbFrame[i];
@@ -674,7 +689,7 @@ void calcFrame(int i) {
       curB[i] = origB[i] +  (float(toB[i] - origB[i]) * perc);
 
   }
-  else if (CycleMode ==4)
+  else if (CycleMode ==CYCLE_MODE_PALETTE_ANIM)
   {
       int iRange = ((float)PotColorRandomness / 1023) * (PWMRANGE * 3); 
       float perc = (float)currentFrame[i] / (float)cycleNbFrame[i];
