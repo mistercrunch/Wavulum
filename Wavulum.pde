@@ -68,8 +68,9 @@ LED = 32 * 80ma = 2.56A @ 3.2
 //   SIN_PIN   = 13
 
 */
-#include </home/mistercrunch/Code/Arduino/Wavulum/TLC5940.h> // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
 #include <EEPROM.h>
+#include "TLC5940.h" // https://whatever.metalab.at/user/wizard23/tlc5940/arduino/TLC5940/
+#include "Globe.h"
 
 //Pins
 #define PIN_BTN_MODE  2
@@ -103,23 +104,15 @@ LED = 32 * 80ma = 2.56A @ 3.2
 #define MSINTRVL 15      //Can be used to delay the execution of the code, without interfering with the low level code necessities
 #define NBLEDS 16        //Number of RGB LEDs connected (Each RGB LED uses 3 channels)
 #define PWMRANGE 4096   //PWM range on the TLC5940
+#define PWM_TOP_VAL PWMRANGE-1 
 #define EventCheckDelay 30 //Interval at which we look for input changes (pots and buttons)
 
 //Program Variables
 TLC5940 leds(9, 12);
 
 //Operational variables 
-int curR[NBLEDS];
-int curG[NBLEDS];
-int curB[NBLEDS];
-int toR[NBLEDS];
-int toG[NBLEDS];
-int toB[NBLEDS];
-int origR[NBLEDS];
-int origG[NBLEDS];
-int origB[NBLEDS];
-int cycleNbFrame[NBLEDS];
-int currentFrame[NBLEDS];
+Globe Globes[NBLEDS];
+
 //Other operational variables
 boolean btnModeLastStatus = 1;       //Used for tracking button push (was pressed, now unpressed)
 boolean btnMemLastStatus = 1;
@@ -192,7 +185,7 @@ void loop () {
     for(int i=0; i<NBLEDS; i++)
     //For each RGB LED
     {
-      calcFrame(i);
+      Globe_Calc(&Globes[i]);
     }
     prevMillis=curMillis;
     DisplayLEDs();    
@@ -421,22 +414,20 @@ byte CheckButton(int btnId)
           ClearCurRGB();
           //-----------------------
           //Different animation for the two buttons
-           if (btnId == PIN_BTN_MODE)
+          byte iRandLED = random(NBLEDS);
+          if (btnId == PIN_BTN_MODE)
           {
-            int iRandLED = random(17);
-            curR[iRandLED] = PWMRANGE -1;
-            curG[iRandLED] = PWMRANGE -1;
-            curB[iRandLED] = PWMRANGE -1;
+            
+            Color_Set(&Globes[iRandLED].CurrentColor, PWM_TOP_VAL, PWM_TOP_VAL, PWM_TOP_VAL);
+            //Color c = {PWM_TOP_VAL, PWM_TOP_VAL, PWM_TOP_VAL};
+            
             if (digitalRead(PIN_BTN_MEM) == BTN_DOWN) return BTN_STATUS_BOTH;//both buttons
           }
           else if (btnId == PIN_BTN_MEM)
           {
-            int iRandLED = random(17);
-            curR[iRandLED] = PWMRANGE-1;
-            iRandLED = random(17);
-            curG[iRandLED] = PWMRANGE-1;
-            iRandLED = random(17);
-            curB[iRandLED] = PWMRANGE-1;
+            
+            Color_Hue(&Globes[iRandLED].CurrentColor, random(PWMRANGE*3));
+            
             if (digitalRead(PIN_BTN_MODE)== BTN_DOWN) return BTN_STATUS_BOTH;//both buttons
           }
           //-----------------------
@@ -454,13 +445,12 @@ void FadeToColor(int iDelay, int R,int G,int B)
 {
         //No event check, will stop current execution to do this fade
         ClearCurRGB();
+        Color cBlack = {0,0,0};
         for(int i=0; i<iDelay; i++)
         {
           for(int iLED =0; iLED<NBLEDS; iLED++)
           {
-            curR[iLED] = ((float)i / (float)iDelay) * R;
-            curG[iLED] = ((float)i / (float)iDelay) * G;
-            curB[iLED] = ((float)i / (float)iDelay) * B;
+                        Color_Between(&cBlack, &Globes[iLED].CurrentColor, i, iDelay);
           }
           DisplayLEDs();
           delay(1);
@@ -612,7 +602,7 @@ void NextMode()
 void FinishAllCycles()
 {
   for(int i=0; i<NBLEDS; i++)
-  currentFrame[i] = cycleNbFrame[i];
+    Globes[i].CyclePosition = Globes[i].CycleDuration;
 }
 
 void GimmePureColor(int &iSpot, int &R, int &G, int &B)
@@ -641,101 +631,22 @@ void GimmePureColor(int &iSpot, int &R, int &G, int &B)
                   B = PWMRANGE - (1 + x);
            }     
 }
-void calcFrame(int i) {
-//Calculates the color of the LED for the next frame (based on mode)
-  if (currentFrame[i] >= cycleNbFrame[i])
-  {
-    StartNewCycle(i);
-  }
-  
-  if (CycleMode ==CYCLE_MODE_FLASH)
-  {
-    //Just flashing
-    if(currentFrame[i] <= cycleNbFrame[i] /2)
-    {
-      curR[i] = toR[i];
-      curG[i] = toG[i];
-      curB[i] = toB[i];
-    }
-    else
-    {
-      curR[i] = 0;
-      curG[i] = 0;
-      curB[i] = 0;
-    }
-  }  
-  else if (CycleMode ==CYCLE_MODE_FADE_IN)
-  {
-      //Fading in then go out
-      float perc = currentFrame[i] / (float)cycleNbFrame[i];
-      curR[i] = toR[i] * perc;
-      curG[i] = toG[i] * perc;
-      curB[i] = toB[i] * perc;
-  }
-  else if (CycleMode ==CYCLE_MODE_FADE_IN_OUT)
-  { 
-      //Fading in then fade out
-      float perc =  sin((((float)currentFrame[i] / (float)cycleNbFrame[i])) * 3.1418);
-      
-      curR[i] = toR[i] * perc;
-      curG[i] = toG[i] * perc;
-      curB[i] = toB[i] * perc;
-  }
-  else if (CycleMode == CYCLE_MODE_FADE_TO_NEXT)
-  {
-      //Fading from a color to another
-      float perc = (float)currentFrame[i] / (float)cycleNbFrame[i];
 
-      curR[i] = origR[i] +  (float(toR[i] - origR[i]) * perc);
-      curG[i] = origG[i] +  (float(toG[i] - origG[i]) * perc);
-      curB[i] = origB[i] +  (float(toB[i] - origB[i]) * perc);
-
-  }
-  else if (CycleMode ==CYCLE_MODE_PALETTE_ANIM)
-  {
-      int iRange = ((float)PotColorRandomness / 1023) * (PWMRANGE * 3); 
-      float perc = (float)currentFrame[i] / (float)cycleNbFrame[i];
-      int iMyColor = iRefColor[0] + ((perc - .5) * iRange);
-      
-      GimmePureColor(iMyColor, curR[i], curG[i], curB[i]);
-  }
-    
-  currentFrame[i]++;
-}
 //---------------------------------------------------------------------------------------------------------------------------------------
 
 void ClearCurRGB()
 {
   for(int i=0; i<NBLEDS; i++)
   {
-    curR[i] = 0;
-    curG[i] = 0;
-    curB[i] = 0;
+    Color_Set(&Globes[i].CurrentColor, 0,0,0);
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------------------------------
-void StartNewCycle(int i)
-{
-  currentFrame[i] = 0;
 
-  cycleNbFrame[i] = (float)PotCycleSpeed / 2;
-  //Adding 20% randomness
-  cycleNbFrame[i] += random((int)((float)PotCycleSpeed * 0.20));
- 
-     //Fade from a color to another
-    //Assign a to color
-    origR[i] = toR[i];    
-    origG[i] = toG[i];
-    origB[i] = toB[i];
-
-  AssignPureRandomColor(i);
-}
 //---------------------------------------------------------------------------------------------------------------------------------------
 void AssignPureRandomColor(int i)
 {
-           //randomSeed(millis());
-           //int iPureColor = random(6 * PWMRANGE);
+
            int x=0;
            int iColorNumber = random(iNbColor);
            int iPureColor = iRefColor[iColorNumber];
