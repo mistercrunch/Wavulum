@@ -75,6 +75,12 @@ LED = 32 * 80ma = 2.56A @ 3.2
 #define PIN_BTN_MODE  2
 #define PIN_BTN_MEM   3    
 
+//Analog pins (potentiometer)
+#define PIN_ANALOG_SPEED           2
+#define PIN_ANALOG_COLOR_RANGE     3
+#define PIN_ANALOG_BRIGHTNESS      4
+#define PIN_ANALOG_COLOR           5
+
 //Buttons
 #define BTN_DOWN  0 //Button is pushed down
 #define BTN_UP    1 //Button is left alone
@@ -366,7 +372,7 @@ void LoadPreviousPattern()
 
 void ManageAutoMode()
 {
-  int iTmpPotCycleSpeed = analogRead(2);
+  int iTmpPotCycleSpeed = analogRead(PIN_ANALOG_SPEED);
   boolean bSkipLoop = false;
   
   if (iTmpPotCycleSpeed >900) 
@@ -587,10 +593,10 @@ void AddColor()
 }
 void ReadPots()
 {
-    iRefColor[0]        = CalibratePot(analogRead(5), 6, 932) * 3 * 4;
-    iBrightness[0]      = (1023 - CalibratePot(analogRead(4), 6, 932));
-    PotColorRandomness  = CalibratePot(analogRead(3), 6, 932);
-    PotCycleSpeed       = (CalibratePot(analogRead(2), 6, 932) / 4)+2;
+    iRefColor[0]        = CalibratePot(analogRead(PIN_ANALOG_COLOR), 6, 932) * 3 * 4;
+    iBrightness[0]      = (1023 - CalibratePot(analogRead(PIN_ANALOG_BRIGHTNESS), 6, 932));
+    PotColorRandomness  = CalibratePot(analogRead(PIN_ANALOG_COLOR_RANGE), 6, 932);
+    PotCycleSpeed       = (CalibratePot(analogRead(PIN_ANALOG_SPEED), 6, 932) / 4)+2;
 }
 
 int CalibratePot(int iValue, int iMin, int iMax)
