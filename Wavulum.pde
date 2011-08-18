@@ -372,7 +372,7 @@ void LoadPreviousPattern()
 
 void ManageAutoMode()
 {
-  int iTmpPotCycleSpeed = analogRead(PIN_ANALOG_SPEED);
+  int iTmpPotCycleSpeed = 500;//analogRead(PIN_ANALOG_SPEED);
   boolean bSkipLoop = false;
   
   if (iTmpPotCycleSpeed >900) 
